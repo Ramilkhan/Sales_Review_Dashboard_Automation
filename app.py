@@ -1,141 +1,141 @@
 import streamlit as st
 import pandas as pd
 
-# =========================================================
-# App Config
-# =========================================================
-st.set_page_config(page_title="Sales Review Dashboard", layout="wide")
-st.title("📊 Sales Review Dashboard")
+st.set_page_config(page_title="Sales Review Automation", layout="wide")
 
-# =========================================================
-# STEP 1: Select Month FIRST
-# =========================================================
-MONTHS = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"]
-selected_month = st.selectbox("📅 Select Month", MONTHS)
+st.title("📊 Sales Review Dashboard Automation")
 
-st.divider()
+# -------------------------
+# VARIANT MAPPING FUNCTION
+# -------------------------
+def map_variant(v):
+    v = str(v).upper().replace(" ", "")
 
-# =========================================================
-# Reporting Variants
-# =========================================================
-REPORT_VARIANTS = [
-    "1.3 GLI MT", "1.3 GLI CVT",
-    "1.3 ATIV MT", "1.3 ATIV CVT", "1.5 ATIV X",
-    "1.6 MT", "1.6 AT", "1.8L",
-    "CROSS", "IMV-III", "Fortuner", "IMV-I"
-]
+    mapping = {
+        "1.3GLICVT": ["YARIS046D1.3CVT"],
+        "1.3GLIMT": ["YARIS046D1.3MT"],
+        "1.3ATIVMT": ["YARIS046D1.3HMT"],
+        "1.3ATIVCVT": ["YARIS046D1.3HCVT"],
+        "1.5ATIVX": ["YARIS046D1.5CVT", "YARIS046D1.5CVTX"],
+        "1.6AT": ["ALTIS1.6CVTM22", "ALTISSE1.6CVTM22"],
+        "1.6MT": ["ALTIS1.6MTM20"],
+        "1.8L": ["ALTISGRANDECVTM20", "ALTISGRANDECVTM20X", "ALTIS1.8CVTM20"],
+        "CROSS": ["CROSS164D"],
+        "IMV-III": ["REVO481D"],
+        "FORTUNER": ["FORTUNER481D"]
+    }
 
-# =========================================================
-# Variant Mapping
-# =========================================================
-VARIANT_MAP = {
-    "YARIS 046D 1.3 CVT": "1.3 GLI CVT",
-    "YARIS 046D 1.3 MT": "1.3 GLI MT",
-    "YARIS 046D 1.3 H MT": "1.3 ATIV MT",
-    "YARIS 046D 1.3 H CVT": "1.3 ATIV CVT",
-    "YARIS 046D 1.5 CVT": "1.5 ATIV X",
-    "YARIS 046D 1.5 CVT X": "1.5 ATIV X",
-
-    "ALTIS 1.6 CVT": "1.6 AT",
-    "ALTIS SE1.6CVT": "1.6 AT",
-    "ALTIS 1.6 MT": "1.6 MT",
-
-    "ALTISGRANDE": "1.8L",
-    "ALTIS 1.8": "1.8L",
-
-    "CROSS 164D": "CROSS",
-    "REVO 481D": "IMV-III",
-    "FORTUNER 481D": "Fortuner"
-}
-
-# =========================================================
-# STEP 2: Upload Files
-# =========================================================
-forecast_file = st.file_uploader("Upload Forecast Excel", type=["xlsx"])
-actual_file = st.file_uploader("Upload Order Intake Excel", type=["xlsx"])
-
-# =========================================================
-# STEP 3: Manual Likely Closing
-# =========================================================
-st.subheader("Manual Likely Closing Input")
-
-likely_closing = {}
-cols = st.columns(6)
-for i, v in enumerate(REPORT_VARIANTS):
-    likely_closing[v] = cols[i % 6].number_input(v, min_value=0, step=1)
-
-# =========================================================
-# Helper Functions
-# =========================================================
-def find_column(df, keywords):
-    for col in df.columns:
-        if any(k in col.lower() for k in keywords):
-            return col
-    return None
-
-def normalize_month(val):
-    val = str(val).upper()
-    return selected_month if selected_month in val else None
-
-def map_variant(raw):
-    raw = str(raw).upper()
-    for k, v in VARIANT_MAP.items():
-        if k in raw:
-            return v
+    for k, values in mapping.items():
+        for val in values:
+            if val in v:
+                return k
     return "IMV-I"
 
-# =========================================================
-# STEP 4: Processing
-# =========================================================
-if forecast_file and actual_file:
+# -------------------------
+# USER INPUT MONTH
+# -------------------------
+month_input = st.text_input("Enter Month (MMYYYY)", value="112025")
 
-    forecast_df = pd.read_excel(forecast_file)
-    actual_df = pd.read_excel(actual_file)
+if len(month_input) != 6 or not month_input.isdigit():
+    st.warning("⚠️ Enter valid format like 112025")
+    st.stop()
 
-    # Detect columns
-    f_variant = find_column(forecast_df, ["variant", "model"])
-    f_qty = find_column(forecast_df, ["qty", "quantity", "forecast"])
-    f_month = find_column(forecast_df, ["month", "period"])
+month = int(month_input[:2])
+year = int(month_input[2:])
 
-    a_variant = find_column(actual_df, ["variant", "model"])
-    a_qty = find_column(actual_df, ["qty", "quantity", "order"])
+# -------------------------
+# FILE UPLOADS
+# -------------------------
+forecast_file = st.file_uploader("Upload Forecast Excel", type=["xlsx"])
+actual_file = st.file_uploader("Upload Actual Order Intake Excel", type=["xlsx"])
 
-    if not all([f_variant, f_qty, f_month, a_variant, a_qty]):
-        st.error("❌ Required columns not found in one or both Excel files")
-        st.stop()
+if not forecast_file or not actual_file:
+    st.stop()
 
-    # Normalize & Map
-    forecast_df["REPORT_VARIANT"] = forecast_df[f_variant].apply(map_variant)
-    actual_df["REPORT_VARIANT"] = actual_df[a_variant].apply(map_variant)
+# -------------------------
+# READ FILES
+# -------------------------
+forecast_df = pd.read_excel(forecast_file)
+actual_df = pd.read_excel(actual_file)
 
-    forecast_df["MONTH_MATCH"] = forecast_df[f_month].apply(normalize_month)
-    forecast_filtered = forecast_df[forecast_df["MONTH_MATCH"].notna()]
+# -------------------------
+# AUTO COLUMN DETECTION
+# -------------------------
+def detect_column(df, keywords):
+    for col in df.columns:
+        for k in keywords:
+            if k in col.lower():
+                return col
+    return None
 
-    # Aggregate quantities
-    forecast_sum = forecast_filtered.groupby("REPORT_VARIANT")[f_qty].sum()
-    actual_sum = actual_df.groupby("REPORT_VARIANT")[a_qty].sum()
+f_variant = detect_column(forecast_df, ["variant"])
+f_date = detect_column(forecast_df, ["date", "month"])
+f_qty = detect_column(forecast_df, ["qty", "quantity"])
 
-    # =========================================================
-    # Output Table (SAFE NaN HANDLING)
-    # =========================================================
-    output = pd.DataFrame(
-        index=[
-            f"{selected_month} - Forecast",
-            "Actual OI - Till Date",
-            "Likely Closing (N)"
-        ],
-        columns=REPORT_VARIANTS
-    ).fillna(0)
+a_variant = detect_column(actual_df, ["variant"])
+a_date = detect_column(actual_df, ["date"])
+a_qty = detect_column(actual_df, ["qty", "quantity"])
 
-    for v in REPORT_VARIANTS:
-        output.loc[f"{selected_month} - Forecast", v] = int(forecast_sum.get(v, 0) or 0)
-        output.loc["Actual OI - Till Date", v] = int(actual_sum.get(v, 0) or 0)
-        output.loc["Likely Closing (N)", v] = likely_closing[v]
+# fallback qty
+if f_qty is None:
+    forecast_df["QTY"] = 1
+    f_qty = "QTY"
 
-    output["Grand Total"] = output.sum(axis=1)
+if a_qty is None:
+    actual_df["QTY"] = 1
+    a_qty = "QTY"
 
-    st.subheader("📈 Output Table")
-    st.dataframe(output, use_container_width=True)
+# -------------------------
+# DATE FILTER
+# -------------------------
+forecast_df[f_date] = pd.to_datetime(forecast_df[f_date], errors="coerce")
+actual_df[a_date] = pd.to_datetime(actual_df[a_date], errors="coerce")
 
-else:
-    st.info("⬆ Please select month and upload both Excel files")
+forecast_df = forecast_df[
+    (forecast_df[f_date].dt.month == month) &
+    (forecast_df[f_date].dt.year == year)
+]
+
+actual_df = actual_df[
+    (actual_df[a_date].dt.month == month) &
+    (actual_df[a_date].dt.year == year)
+]
+
+# -------------------------
+# APPLY VARIANT MAPPING
+# -------------------------
+forecast_df["Mapped Variant"] = forecast_df[f_variant].apply(map_variant)
+actual_df["Mapped Variant"] = actual_df[a_variant].apply(map_variant)
+
+# -------------------------
+# AGGREGATION
+# -------------------------
+forecast_sum = forecast_df.groupby("Mapped Variant")[f_qty].sum()
+actual_sum = actual_df.groupby("Mapped Variant")[a_qty].sum()
+
+variants = sorted(set(forecast_sum.index).union(actual_sum.index))
+
+# -------------------------
+# MANUAL INPUT
+# -------------------------
+st.subheader("✍️ Manual Adjustment")
+manual_data = {}
+for v in variants:
+    manual_data[v] = st.number_input(f"{v}", min_value=0, value=0)
+
+# -------------------------
+# OUTPUT TABLE
+# -------------------------
+output = pd.DataFrame(index=[
+    "Forecast",
+    "Actual OI - Till Date",
+    "Manual Input"
+], columns=variants).fillna(0)
+
+for v in variants:
+    output.loc["Forecast", v] = int(forecast_sum.get(v, 0))
+    output.loc["Actual OI - Till Date", v] = int(actual_sum.get(v, 0))
+    output.loc["Manual Input", v] = manual_data[v]
+
+st.subheader("✅ Final Output Table")
+st.dataframe(output, use_container_width=True)
